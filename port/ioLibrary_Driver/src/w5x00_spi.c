@@ -328,3 +328,12 @@ void print_network_information(wiz_NetInfo net_info)
     printf(" DNS         : %d.%d.%d.%d\n", net_info.dns[0], net_info.dns[1], net_info.dns[2], net_info.dns[3]);
     printf("====================================================================================================\n\n");
 }
+
+int32_t recv_iperf(uint8_t sn, uint8_t * buf, uint16_t len)
+{
+   wiz_recv_data(sn, buf, len);
+   setSn_CR(sn,Sn_CR_RECV);
+   while(getSn_CR(sn));
+ 
+   return (int32_t)len;
+}

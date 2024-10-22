@@ -198,4 +198,6 @@ void network_initialize(wiz_NetInfo net_info);
  */
 void print_network_information(wiz_NetInfo net_info);
 
+int32_t recv_iperf(uint8_t sn, uint8_t * buf, uint16_t len);
+
 #endif /* _W5X00_SPI_H_ */
