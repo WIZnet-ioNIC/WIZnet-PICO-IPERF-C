@@ -170,15 +170,15 @@ static void wizchip_critical_section_unlock(void)
     critical_section_exit(&g_wizchip_cri_sec);
 }
 
-void wizchip_spi_initialize(void)
+void wizchip_spi_initialize(uint32_t spi_clock)
 {
 #ifdef USE_SPI_PIO
     spi_handle = wiznet_spi_pio_open(&g_spi_config);
     (*spi_handle)->set_active(spi_handle);
 
 #else
-    // this example will use SPI0 at 5MHz
-    spi_init(SPI_PORT, 5000 * 1000);
+    // this example will use SPI0 at spi_clock
+    printf("spi_init return = %dHz\r\n", spi_init(SPI_PORT, spi_clock));
 
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
@@ -250,7 +250,7 @@ void wizchip_initialize(void)
 #if (_WIZCHIP_ == W5100S)
     uint8_t memsize[2][4] = {{2, 2, 2, 2}, {2, 2, 2, 2}};
 #elif (_WIZCHIP_ == W5500)
-    uint8_t memsize[2][8] = {{2, 2, 2, 2, 2, 2, 2, 2}, {2, 2, 2, 2, 2, 2, 2, 2}};
+    uint8_t memsize[2][8] = {{8, 8, 0, 0, 0, 0, 0, 0}, {8, 8, 0, 0, 0, 0, 0, 0}};
 #endif
 
     if (ctlwizchip(CW_INIT_WIZCHIP, (void *)memsize) == -1)

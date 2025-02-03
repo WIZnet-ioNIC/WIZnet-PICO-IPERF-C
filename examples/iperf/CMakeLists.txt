@@ -2,6 +2,8 @@ set(TARGET_NAME w5x00_iperf)
 
 add_executable(${TARGET_NAME}
         ${TARGET_NAME}.c
+        cJSON.c
+        iperf.c
         )
 
 target_link_libraries(${TARGET_NAME} PRIVATE

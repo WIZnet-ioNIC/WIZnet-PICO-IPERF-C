@@ -38,7 +38,7 @@
 #define PIN_IRQ 21
 
 /* Use SPI DMA */
-//#define USE_SPI_DMA // if you want to use SPI DMA, uncomment.
+#define USE_SPI_DMA // if you want to use SPI DMA, uncomment.
 #endif
 /**
  * ----------------------------------------------------------------------------------------------------
@@ -138,7 +138,7 @@ static void wizchip_critical_section_unlock(void);
  *
  *  \param none
  */
-void wizchip_spi_initialize(void);
+void wizchip_spi_initialize(uint32_t spi_clock);
 
 /*! \brief Initialize a critical section structure
  *  \ingroup w5x00_spi
