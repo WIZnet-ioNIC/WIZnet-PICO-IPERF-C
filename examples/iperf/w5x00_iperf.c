@@ -18,7 +18,6 @@
 #include "w5x00_spi.h"
 
 #include "socket.h"
-#include "timer.h"
 
 #include "cJSON.h" // JSON handling library
 #include "iperf.h"
@@ -40,8 +39,7 @@
 #define SOCKET_DATA 1
 
 /* Port */
-// #define PORT_IPERF 5002
-#define PORT_IPERF 5201     //iperf3
+#define PORT_IPERF 5201
 
 #define MAX_RESULT_LEN 1024
 
@@ -67,7 +65,7 @@
 static wiz_NetInfo g_net_info =
     {
         .mac = {0x00, 0x08, 0xDC, 0x12, 0x34, 0x56}, // MAC address
-        .ip = {192, 168, 11, 102},                     // IP address
+        .ip = {192, 168, 11, 100},                     // IP address
         .sn = {255, 255, 255, 0},                    // Subnet Mask
         .gw = {192, 168, 11, 1},                     // Gateway
         .dns = {8, 8, 8, 8},                         // DNS server
@@ -101,21 +99,14 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats);
 int main()
 {
     /* Initialize */
-    int retval = 0;
     bool reverse = false;
     bool udp = false;
     uint8_t socket_status;
-    uint16_t received_len;
-    uint32_t pack_len = 0;
     Stats stats;
 
     set_clock_khz();
-
     stdio_init_all();
-
     wizchip_spi_initialize((PLL_SYS_KHZ / 4) * 1000);
-    // wizchip_spi_initialize((PLL_SYS_KHZ / 2) * 1000);
-    // wizchip_spi_initialize();
     // wizchip_cris_initialize();
 
     wizchip_reset();
@@ -136,17 +127,27 @@ int main()
 
         socket_status = getSn_SR(SOCKET_CTRL);
 
-        if (socket_status == SOCK_ESTABLISHED) {
-
+        if (socket_status == SOCK_ESTABLISHED)
+        {
             handle_param_exchange(SOCKET_CTRL, &reverse, &udp);
             handle_create_streams(SOCKET_CTRL, udp);
+
+            if (reverse)
+            {
+                memset(g_iperf_buf, 0xAA, ETHERNET_BUF_MAX_SIZE / 2);
+            }
+            
             start_iperf_test(SOCKET_CTRL, SOCKET_DATA, &stats, reverse, udp);
 
             disconnect(SOCKET_DATA);
             disconnect(SOCKET_CTRL);
-        } else if (socket_status == SOCK_CLOSE_WAIT) {
+        } 
+        else if (socket_status == SOCK_CLOSE_WAIT)
+        {
             disconnect(SOCKET_CTRL);
-        } else if (socket_status == SOCK_CLOSED) {
+        } 
+        else if (socket_status == SOCK_CLOSED)
+        {
             socket(SOCKET_CTRL, Sn_MR_TCP, PORT_IPERF, 0);
             listen(SOCKET_CTRL);
         }
@@ -186,37 +187,50 @@ void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp)
     cJSON *udpItem;
 
     cookie_len = recv(socket_ctrl, cookie, COOKIE_SIZE);
-    if (cookie_len != COOKIE_SIZE) {
+    if (cookie_len != COOKIE_SIZE)
+    {
         printf("[iperf] Failed to receive cookie. Received: %d bytes\n", cookie_len);
         return;
     }
+
+#ifdef IPERF_DEBUG
     printf("[iperf] Received cookie: %s\n", cookie);
+#endif
 
     cmd = PARAM_EXCHANGE;
     send(socket_ctrl, &cmd, 1);
     recv(socket_ctrl, raw_len, 4);
 
     len = (raw_len[0] << 24) | (raw_len[1] << 16) | (raw_len[2] << 8) | raw_len[3];
-    printf("[iperf] Raw length bytes: 0x%02X 0x%02X 0x%02X 0x%02X, Parsed length: %d\n",
-           raw_len[0], raw_len[1], raw_len[2], raw_len[3], len);
+#ifdef IPERF_DEBUG
+    printf("[iperf] Raw length bytes: 0x%02X 0x%02X 0x%02X 0x%02X, Parsed length: %d\n", raw_len[0], raw_len[1], raw_len[2], raw_len[3], len);
+#endif
 
     recv(socket_ctrl, (uint8_t *)buffer, len);
     buffer[len] = '\0'; // Null-terminate
 
+#ifdef IPERF_DEBUG
     printf("[iperf] Received parameters: %s\n", buffer);
+#endif
 
     json = cJSON_Parse(buffer);
-    if (json == NULL) {
+    if (json == NULL)
+    {
         printf("[iperf] Failed to parse JSON: %s\n", cJSON_GetErrorPtr());
-    } else {
-        printf("[iperf] Parsed JSON: %s\n", cJSON_Print(json));
+    }
+    else
+    {
         reverseItem = cJSON_GetObjectItem(json, "reverse");
         udpItem = cJSON_GetObjectItem(json, "udp");
 
         *reverse = (reverseItem && cJSON_IsBool(reverseItem)) ? reverseItem->valueint : 0;
         *udp = (udpItem && cJSON_IsBool(udpItem)) ? udpItem->valueint : 0;
-        cJSON_Delete(json);
+
+#ifdef IPERF_DEBUG
+        printf("[iperf] Parsed JSON: %s\n", cJSON_Print(json));
         printf("[iperf] Parsed JSON: reverse=%d, udp=%d\n", *reverse, *udp);
+#endif
+        cJSON_Delete(json);
     }
 }
 
@@ -226,24 +240,27 @@ void handle_create_streams(uint8_t socket_ctrl, bool udp)
     uint8_t received;
 
     send(socket_ctrl, &cmd, 1);
-    printf("[iperf] Sent CREATE_STREAMS command.\n");
 
     socket(SOCKET_DATA, Sn_MR_TCP, PORT_IPERF, 0);
     listen(SOCKET_DATA);
 
     // Wait for client to connect to data socket
-    while (getSn_SR(SOCKET_DATA) != SOCK_ESTABLISHED) {
-        if (getSn_SR(SOCKET_DATA) == SOCK_CLOSED) {
+    while (getSn_SR(SOCKET_DATA) != SOCK_ESTABLISHED)
+    {
+        if (getSn_SR(SOCKET_DATA) == SOCK_CLOSED)
+        {
             printf("[iperf] Data socket closed unexpectedly.\n");
             return;
         }
     }
-    printf("[iperf] Data connection established.\n");
 
     // Receive cookie on data socket
     received = recv(SOCKET_DATA, cookie, COOKIE_SIZE);
-    if (received > 0) {
+    if (received > 0)
+    {
+#ifdef IPERF_DEBUG
         printf("[iperf] Received data cookie: %s\n", cookie);
+#endif
     }
 }
 
@@ -251,10 +268,9 @@ void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bo
 {
     bool running = true;
     uint8_t cmd = 0;
-    uint32_t total_bytes = 0;
     uint32_t pack_len = 0;
-
-    printf("[iperf] Starting data stream test...\n");
+    uint16_t sent_bytes = 0;
+    uint16_t recv_bytes = 0;
 
     // Start test
     cmd = TEST_START;
@@ -266,30 +282,37 @@ void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bo
 
     stats_start(stats);
 
-    while (running) {
-        if (getSn_RX_RSR(SOCKET_CTRL) > 0) {
+    while (running)
+    {
+        if (getSn_RX_RSR(SOCKET_CTRL) > 0)
+        {
             recv(SOCKET_CTRL, &cmd, 1);
-            if (cmd == TEST_END) {
-                printf("[iperf] TEST_END command received. Stopping test...\n");
+            if (cmd == TEST_END)
+            {
                 running = false;
                 break;
             }
         }
 
-        if (reverse) {
-            memset(g_iperf_buf, 0xAA, ETHERNET_BUF_MAX_SIZE / 2);
-            send(socket_data, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2);
-            stats_add_bytes(stats, ETHERNET_BUF_MAX_SIZE / 2);
-        } else {
+        if (reverse)
+        {
+            sent_bytes = send(socket_data, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2);
+            stats_add_bytes(stats, sent_bytes);
+        }
+        else
+        {
             getsockopt(socket_data, SO_RECVBUF, &pack_len);
             if (pack_len > 0)
             {
-                recv_iperf(socket_data, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2);
-                stats_add_bytes(stats, ETHERNET_BUF_MAX_SIZE / 2);
+                uint16_t recv_bytes =  recv_iperf(socket_data, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE - 1);
+                stats_add_bytes(stats, recv_bytes);
             }
-            else if (pack_len == 0) {
+            else if (pack_len == 0)
+            {
                 stats_update(stats, false);
-            } else {
+            }
+            else
+            {
                 printf("[iperf] Error during data reception\n");
                 break;
             }
@@ -315,20 +338,22 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
 
     // Ask to exchange results
     send(socket_ctrl, &cmd, 1);
-    printf("[iperf] Sent EXCHANGE_RESULTS command.\n");
 
     // Receive client results
     recv(socket_ctrl, (uint8_t *)&result_len, 4);
     result_len = (result_len << 24) | ((result_len << 8) & 0x00FF0000) | ((result_len >> 8) & 0x0000FF00) | (result_len >> 24); // Convert to host-endian
 
-    if (result_len > sizeof(buffer)) {
+    if (result_len > sizeof(buffer))
+    {
         printf("[iperf] Received result length exceeds buffer size.\n");
         return;
     }
 
     recv(socket_ctrl, (uint8_t *)buffer, result_len);
     buffer[result_len] = '\0'; // Null-terminate the received JSON data
+#ifdef IPERF_DEBUG
     printf("[iperf] Client results received: %s\n", buffer);
+#endif
 
     // Prepare server results
     results = cJSON_CreateObject();
@@ -346,9 +371,9 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
     cJSON_AddNumberToObject(stream, "retransmits", 0);
     cJSON_AddNumberToObject(stream, "jitter", 0);
     cJSON_AddNumberToObject(stream, "errors", 0);
-    cJSON_AddNumberToObject(stream, "packets", stats->np0);  // 총 패킷 수 추가
+    cJSON_AddNumberToObject(stream, "packets", stats->np0);
     cJSON_AddNumberToObject(stream, "start_time", 0);
-    cJSON_AddNumberToObject(stream, "end_time", (double)(stats->t3 - stats->t0) / 1000000.0);  // 종료 시간 계산
+    cJSON_AddNumberToObject(stream, "end_time", (double)(stats->t3 - stats->t0) / 1000000.0);
     cJSON_AddItemToArray(streams, stream);
     cJSON_AddItemToObject(results, "streams", streams);
 
@@ -365,8 +390,6 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
     send(socket_ctrl, length_bytes, 4);
     send(socket_ctrl, (uint8_t *)results_str, results_len);
 
-    printf("[iperf] Server results sent.\n");
-
     cJSON_Delete(results);
 
     // Ask to display results
@@ -375,9 +398,12 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
 
     // Wait for IPERF_DONE command
     recv(socket_ctrl, &cmd, 1);
-    if (cmd == IPERF_DONE) {
+    if (cmd == IPERF_DONE)
+    {
         printf("[iperf] Test completed successfully.\n");
-    } else {
+    }
+    else
+    {
         printf("[iperf] Unexpected command received: %d\n", cmd);
     }
 }
