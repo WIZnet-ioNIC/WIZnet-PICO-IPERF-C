@@ -10,7 +10,7 @@ uint32_t get_time_us()
     return (uint32_t)time_us_64();
 }
 
-void stats_init(Stats *stats, uint32_t pacing_timer_ms)
+void iperf_stats_init(Stats *stats, uint32_t pacing_timer_ms)
 {
     stats->pacing_timer_us = pacing_timer_ms * 1000;
     stats->running = false;
@@ -23,7 +23,7 @@ void stats_init(Stats *stats, uint32_t pacing_timer_ms)
     stats->np1 = 0;
 }
 
-void stats_start(Stats *stats)
+void iperf_stats_start(Stats *stats)
 {
     stats->running = true;
     stats->t0 = stats->t1 = get_time_us();
@@ -32,7 +32,7 @@ void stats_start(Stats *stats)
     printf("Interval           Transfer     Bitrate\n");
 }
 
-void stats_update(Stats *stats, bool final)
+void iperf_stats_update(Stats *stats, bool final)
 {
     if (!stats->running) return;
 
@@ -44,8 +44,10 @@ void stats_update(Stats *stats, bool final)
         double tb = (t2 - stats->t0) / 1e6;         // End time of the current interval
         double transfer_mbits = (stats->nb1 * 8) / 1e6 / (dt / 1e6);  // Calculate Mbps
 
+#ifdef IPERF_DEBUG
         printf("%5.2f-%-5.2f sec %8u Bytes  %5.2f Mbits/sec\n",
                ta, tb, stats->nb1, transfer_mbits);
+#endif
 
         stats->t1 = t2;  // Update the timer
         stats->nb1 = 0;  // Reset byte count per interval
@@ -53,11 +55,8 @@ void stats_update(Stats *stats, bool final)
     }
 }
 
-void stats_stop(Stats *stats)
+void iperf_stats_stop(Stats *stats)
 {
-    if (!stats->running) return;
-
-    stats_update(stats, true);
     stats->running = false;
 
     stats->t3 = get_time_us();
@@ -70,7 +69,7 @@ void stats_stop(Stats *stats)
            total_time_s, stats->nb0, transfer_mbits);
 }
 
-void stats_add_bytes(Stats *stats, uint32_t n) {
+void iperf_stats_add_bytes(Stats *stats, uint32_t n) {
     if (!stats->running) return;
 
     stats->nb0 += n;  // Increase total byte count

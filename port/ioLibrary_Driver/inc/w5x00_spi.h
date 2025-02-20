@@ -138,7 +138,7 @@ static void wizchip_critical_section_unlock(void);
  *
  *  \param none
  */
-void wizchip_spi_initialize(uint32_t spi_clock);
+void wizchip_spi_initialize(void);
 
 /*! \brief Initialize a critical section structure
  *  \ingroup w5x00_spi

@@ -50,7 +50,7 @@ wiznet_spi_config_t g_spi_config = {
     .clock_pin = PIN_SCK,
     .irq_pin = PIN_IRQ,
     .reset_pin = PIN_RST,
-    .clock_div_major = 2,
+    .clock_div_major = 1,
     .clock_div_minor = 0,
 };
 
@@ -170,15 +170,15 @@ static void wizchip_critical_section_unlock(void)
     critical_section_exit(&g_wizchip_cri_sec);
 }
 
-void wizchip_spi_initialize(uint32_t spi_clock)
+void wizchip_spi_initialize(void)
 {
 #ifdef USE_SPI_PIO
     spi_handle = wiznet_spi_pio_open(&g_spi_config);
     (*spi_handle)->set_active(spi_handle);
 
 #else
-    // this example will use SPI0 at spi_clock
-    printf("spi_init return = %dHz\r\n", spi_init(SPI_PORT, spi_clock));
+    // this example will use SPI0 at 5MHz
+    spi_init(SPI_PORT, 5000 * 1000);
 
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);

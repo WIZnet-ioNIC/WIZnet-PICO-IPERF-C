@@ -1,1 +1,2 @@
-add_subdirectory(iperf)
+add_subdirectory(iperf2)
+add_subdirectory(iperf3)

@@ -28,15 +28,15 @@
  * ----------------------------------------------------------------------------------------------------
  */
 /* Clock */
-#define PLL_SYS_KHZ (133 * 1000)
-// #define PLL_SYS_KHZ (90 * 1000)
+// #define PLL_SYS_KHZ (133 * 1000)
+#define PLL_SYS_KHZ (90 * 1000)
 
 /* Buffer */
 #define ETHERNET_BUF_MAX_SIZE (1024 * 8)
 
 /* Socket */
-#define SOCKET_CTRL 0
-#define SOCKET_DATA 1
+#define SOCKET_DATA 0
+#define SOCKET_CTRL 1
 
 /* Port */
 #define PORT_IPERF 5201
@@ -57,15 +57,15 @@
 #define IPERF_DONE 16
 
 /**
- * ----------------------------------------------------------------------------------------------------
  * Variables
+ * ----------------------------------------------------------------------------------------------------
  * ----------------------------------------------------------------------------------------------------
  */
 /* Network */
 static wiz_NetInfo g_net_info =
     {
-        .mac = {0x00, 0x08, 0xDC, 0x12, 0x34, 0x56}, // MAC address
-        .ip = {192, 168, 11, 100},                     // IP address
+        .mac = {0x00, 0x08, 0xDC, 0x12, 0x34, 0x57}, // MAC address
+        .ip = {192, 168, 11, 101},                     // IP address
         .sn = {255, 255, 255, 0},                    // Subnet Mask
         .gw = {192, 168, 11, 1},                     // Gateway
         .dns = {8, 8, 8, 8},                         // DNS server
@@ -78,6 +78,8 @@ static uint8_t g_iperf_buf[ETHERNET_BUF_MAX_SIZE * 2] = {
 };
 static uint8_t cookie[COOKIE_SIZE] = {0};
 
+uint8_t dest_ip[4];
+uint16_t destport;
 
 /**
  * ----------------------------------------------------------------------------------------------------
@@ -87,8 +89,8 @@ static uint8_t cookie[COOKIE_SIZE] = {0};
 /* Clock */
 static void set_clock_khz(void);
 void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp);
-void handle_create_streams(uint8_t socket_ctrl, bool udp);
-void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bool reverse, bool udp);
+void handle_create_streams(uint8_t socket_ctrl, bool udp, uint8_t *dest_ip, uint16_t destport);
+void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bool reverse, bool udp, uint8_t *dest_ip, uint16_t destport);
 void exchange_results(uint8_t socket_ctrl, Stats *stats);
 
 /**
@@ -99,15 +101,19 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats);
 int main()
 {
     /* Initialize */
-    bool reverse = false;
-    bool udp = false;
+    
     uint8_t socket_status;
     Stats stats;
+    
+    bool reverse = false;
+    bool udp = false;
 
     set_clock_khz();
     stdio_init_all();
-    wizchip_spi_initialize((PLL_SYS_KHZ / 4) * 1000);
-    // wizchip_cris_initialize();
+
+    sleep_ms(3000);
+    wizchip_spi_initialize();
+    wizchip_cris_initialize();
 
     wizchip_reset();
     wizchip_initialize();
@@ -123,28 +129,26 @@ int main()
 
     while (1)
     {
-        stats_init(&stats, 1000);
+        iperf_stats_init(&stats, 1000);
 
         socket_status = getSn_SR(SOCKET_CTRL);
 
         if (socket_status == SOCK_ESTABLISHED)
         {
             handle_param_exchange(SOCKET_CTRL, &reverse, &udp);
-            handle_create_streams(SOCKET_CTRL, udp);
+            handle_create_streams(SOCKET_CTRL, udp, dest_ip, destport);
 
             if (reverse)
             {
                 memset(g_iperf_buf, 0xAA, ETHERNET_BUF_MAX_SIZE / 2);
             }
             
-            start_iperf_test(SOCKET_CTRL, SOCKET_DATA, &stats, reverse, udp);
-
-            disconnect(SOCKET_DATA);
-            disconnect(SOCKET_CTRL);
+            start_iperf_test(SOCKET_CTRL, SOCKET_DATA, &stats, reverse, udp, dest_ip, PORT_IPERF);
         } 
         else if (socket_status == SOCK_CLOSE_WAIT)
         {
             disconnect(SOCKET_CTRL);
+            listen(SOCKET_CTRL);
         } 
         else if (socket_status == SOCK_CLOSED)
         {
@@ -234,43 +238,61 @@ void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp)
     }
 }
 
-void handle_create_streams(uint8_t socket_ctrl, bool udp) 
+void handle_create_streams(uint8_t socket_ctrl, bool udp, uint8_t *dest_ip, uint16_t destport)
 {
     uint8_t cmd = CREATE_STREAMS;
-    uint8_t received;
+    uint8_t received = 0;
+    uint8_t ret;
+    uint16_t size, sentsize;
 
     send(socket_ctrl, &cmd, 1);
 
-    socket(SOCKET_DATA, Sn_MR_TCP, PORT_IPERF, 0);
-    listen(SOCKET_DATA);
-
-    // Wait for client to connect to data socket
-    while (getSn_SR(SOCKET_DATA) != SOCK_ESTABLISHED)
+    if(udp)
     {
-        if (getSn_SR(SOCKET_DATA) == SOCK_CLOSED)
-        {
-            printf("[iperf] Data socket closed unexpectedly.\n");
-            return;
-        }
-    }
+        socket(SOCKET_DATA, Sn_MR_UDP, PORT_IPERF, 0);
 
-    // Receive cookie on data socket
-    received = recv(SOCKET_DATA, cookie, COOKIE_SIZE);
+        uint8_t handshake_buffer[4];
+        recvfrom(SOCKET_DATA, handshake_buffer, sizeof(handshake_buffer), dest_ip, &destport);
+
+        printf("[iperf] Received UDP handshake from %d.%d.%d.%d:%d\n",dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3], destport);
+
+        // 클라이언트에게 응답 전송
+        uint8_t handshake_msg[4] = {0x12, 0x34, 0x56, 0x78};
+        sendto(SOCKET_DATA, handshake_msg, sizeof(handshake_msg), dest_ip, destport);
+    }
+    else 
+    {
+        socket(SOCKET_DATA, Sn_MR_TCP, PORT_IPERF, 0x20);
+        listen(SOCKET_DATA);
+
+        // Wait for client to connect to data socket
+        while (getSn_SR(SOCKET_DATA) != SOCK_ESTABLISHED)
+        {
+            if (getSn_SR(SOCKET_DATA) == SOCK_CLOSED)
+            {
+                printf("[iperf] Data socket closed unexpectedly.\n");
+                return;
+            }
+        }
+        received = recv(SOCKET_DATA, cookie, COOKIE_SIZE);
+    } 
+
+#ifdef IPERF_DEBUG
     if (received > 0)
     {
-#ifdef IPERF_DEBUG
         printf("[iperf] Received data cookie: %s\n", cookie);
-#endif
     }
+#endif
 }
 
-void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bool reverse, bool udp)
+void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bool reverse, bool udp, uint8_t *dest_ip, uint16_t destport)
 {
     bool running = true;
     uint8_t cmd = 0;
     uint32_t pack_len = 0;
     uint16_t sent_bytes = 0;
     uint16_t recv_bytes = 0;
+    uint16_t size = 0;
 
     // Start test
     cmd = TEST_START;
@@ -280,36 +302,52 @@ void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bo
     cmd = TEST_RUNNING;
     send(socket_ctrl, &cmd, 1);
 
-    stats_start(stats);
+    iperf_stats_start(stats);
 
-    while (running)
+    while (stats->running)
     {
         if (getSn_RX_RSR(SOCKET_CTRL) > 0)
         {
             recv(SOCKET_CTRL, &cmd, 1);
             if (cmd == TEST_END)
             {
-                running = false;
+                stats->running = false;
                 break;
             }
         }
 
         if (reverse)
         {
-            sent_bytes = send(socket_data, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2);
-            stats_add_bytes(stats, sent_bytes);
+            if(udp)
+            {
+                sent_bytes = sendto(socket_data, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2, dest_ip, destport);
+            }
+            else
+            {
+                sent_bytes = send(socket_data, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2);
+            }
+            
+            iperf_stats_add_bytes(stats, sent_bytes);
         }
         else
         {
             getsockopt(socket_data, SO_RECVBUF, &pack_len);
-            if (pack_len > 0)
+            if(pack_len > 0)
             {
-                uint16_t recv_bytes =  recv_iperf(socket_data, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE - 1);
-                stats_add_bytes(stats, recv_bytes);
+                if(udp)
+                {
+                    recv_bytes = recvfrom(socket_data, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE - 1, dest_ip, (uint16_t*)&destport);
+                }
+                else
+                {
+                    recv_bytes = recv_iperf(socket_data, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE - 1);
+                }
+
+                iperf_stats_add_bytes(stats, recv_bytes);
             }
             else if (pack_len == 0)
             {
-                stats_update(stats, false);
+                iperf_stats_update(stats, false);
             }
             else
             {
@@ -317,9 +355,9 @@ void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bo
                 break;
             }
         }
-        stats_update(stats, false);
+        iperf_stats_update(stats, false);
     }
-    stats_stop(stats);
+    iperf_stats_stop(stats);
 
     exchange_results(SOCKET_CTRL, stats);
 }

@@ -2,7 +2,7 @@
 #include <stdbool.h>
 
 /* Iperf debug message printout enable */
-//#define IPERF_DEBUG
+// #define IPERF_DEBUG
 
 typedef struct {
     uint32_t pacing_timer_us;  // Timer period (in microseconds)
@@ -16,8 +16,8 @@ typedef struct {
     uint32_t np1;              // Number of packets per interval
 } Stats;
 
-void stats_init(Stats *stats, uint32_t pacing_timer_ms);
-void stats_start(Stats *stats);
-void stats_update(Stats *stats, bool final);
-void stats_stop(Stats *stats);
-void stats_add_bytes(Stats *stats, uint32_t n);
+void iperf_stats_init(Stats *stats, uint32_t pacing_timer_ms);
+void iperf_stats_start(Stats *stats);
+void iperf_stats_update(Stats *stats, bool final);
+void iperf_stats_stop(Stats *stats);
+void iperf_stats_add_bytes(Stats *stats, uint32_t n);
