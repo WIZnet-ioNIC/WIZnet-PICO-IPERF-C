@@ -80,7 +80,7 @@ int32_t recv_lwip(uint8_t sn, uint8_t *buf, uint16_t len)
     uint8_t head[2];
     uint16_t pack_len = 0;
 
-    pack_len = getSn_RX_RSR(sn);
+    pack_len = len;
 
     if (pack_len > 0)
     {
@@ -141,13 +141,11 @@ err_t netif_output(struct netif *netif, struct pbuf *p)
 
 void netif_link_callback(struct netif *netif)
 {
-    printf("netif_link_callback\n");
     printf("netif link status changed %s\n", netif_is_link_up(netif) ? "up" : "down");
 }
 
 void netif_status_callback(struct netif *netif)
 {
-    printf(" netif_status_callback\n");
     printf("netif status changed %s\n", ip4addr_ntoa(netif_ip4_addr(netif)));
 }
 

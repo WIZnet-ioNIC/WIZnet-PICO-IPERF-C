@@ -3,11 +3,11 @@ cmake_minimum_required(VERSION 3.12)
  
 # Set board
 #set(BOARD_NAME WIZnet_Ethernet_HAT)
-#set(BOARD_NAME W5100S_EVB_PICO)
-set(BOARD_NAME W5500_EVB_PICO)
-#set(BOARD_NAME W55RP20_EVB_PICO)
-#set(BOARD_NAME W5100S_EVB_PICO2)
-#set(BOARD_NAME W5500_EVB_PICO2)
+# set(BOARD_NAME W5100S_EVB_PICO)
+# set(BOARD_NAME W5500_EVB_PICO)
+set(BOARD_NAME W55RP20_EVB_PICO)
+# set(BOARD_NAME W5100S_EVB_PICO2)
+# set(BOARD_NAME W5500_EVB_PICO2)
 
 if(${BOARD_NAME} STREQUAL WIZnet_Ethernet_HAT)
     #set(PICO_PLATFORM rp2350) #If you are using WIZnet_ethernet_HAT with Pico2, uncomment it.
@@ -53,10 +53,10 @@ if(NOT DEFINED PICO_SDK_PATH)
 endif()
 
 include(pico_sdk_import.cmake)
-include(wiznet_pico_c_sdk_version.cmake)
+include(wiznet_pico_iperf_c_sdk_version.cmake)
 
 # Set project name
-set(PROJECT_NAME WIZNET-PICO-C)
+set(PROJECT_NAME WIZNET-PICO-IPERF-C)
 
 # Set project informations
 project(${PROJECT_NAME} C CXX ASM)

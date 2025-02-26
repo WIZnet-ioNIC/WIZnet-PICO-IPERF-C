@@ -6,10 +6,8 @@
 
 The following serial terminal programs are required for iPerf example test, download and install from below links.
 
-Note that iPerf uses iPerf 2.0.9.
-
 - [**Tera Term**][link-tera_term]
-- [**iPerf**][link-iPerf]
+- [**iPerf3**][link-iPerf]
 
 
 
@@ -29,7 +27,7 @@ If you are using W5100S-EVB-Pico, W5500-EVB-Pico, W55RP20-EVB-Pico, W5100S-EVB-P
 
 To test the iPerf example, minor settings shall be done in code.
 
-1. Setup SPI port and pin in 'w5x00_spi.h' in 'WIZnet-PICO-C/port/ioLibrary_Driver/' directory.
+1. Setup SPI port and pin in 'w5x00_spi.h' in 'WIZnet-PICO-IPERF-C/port/ioLibrary_Driver/' directory.
 
 Setup the SPI interface you use.
 - If you use the W5100S-EVB-Pico, W5500-EVB-Pico, W5100S-EVB-Pico2 or W5500-EVB-Pico2,
@@ -63,7 +61,7 @@ If you want to test with the iPerf example using SPI DMA, uncomment USE_SPI_DMA.
 #define PIN_RST 25
 ```
 
-2. Setup network configuration such as IP in 'w5x00_iperf.c' which is the iPerf example in 'WIZnet-PICO-C/examples/iperf2/' directory.
+2. Setup network configuration such as IP in 'w5x00_iperf_lwip.c' which is the iPerf example in 'WIZnet-PICO-IPERF-C/examples/iperf3/lwip/' directory.
 
 Setup IP and other network settings to suit your network environment.
 
@@ -80,20 +78,25 @@ static wiz_NetInfo g_net_info =
 };
 ```
 
-3. Setup iPerf configuration in 'w5x00_iperf.c' in 'WIZnet-PICO-C/examples/iperf2/' directory.
+3. Setup iPerf configuration in 'w5x00_iperf_lwip.c' in 'WIZnet-PICO-IPERF-C/examples/iperf3/lwip/' directory.
 
 ```cpp
 /* Port */
-#define PORT_IPERF 5001
+#define PORT_IPERF 5201
 ```
 
+4. Setup LwIP default port in 'lwiperf.h' in 'WIZnet-PICO-IPERF-C/libraries/pico-sdk/lib/lwip/src/include/lwip/apps/' directory.
+
+```cpp
+#define LWIPERF_TCP_PORT_DEFAULT  5201
+```
 
 
 ## Step 4: Build
 
 1. After completing the iPerf example configuration, click 'build' in the status bar at the bottom of Visual Studio Code or press the 'F7' button on the keyboard to build.
 
-2. When the build is completed, 'w5x00_iperf.uf2' is generated in 'WIZnet-PICO-C/build/examples/iperf2/' directory.
+2. When the build is completed, 'w5x00_iperf_lwip.uf2' is generated in 'WIZnet-PICO-IPERF-C/build/examples/iperf3/lwip/' directory.
 
 
 
@@ -103,7 +106,7 @@ static wiz_NetInfo g_net_info =
 
 ![][link-raspberry_pi_pico_usb_mass_storage]
 
-2. Drag and drop 'w5x00_iperf.uf2' onto the USB mass storage device 'RPI-RP2'.
+2. Drag and drop 'w5x00_iperf_lwip.uf2' onto the USB mass storage device 'RPI-RP2'.
 
 3. Connect to the serial COM port of Raspberry Pi Pico, W5100S-EVB-Pico, W5500-EVB-Pico, W55RP20-EVB-Pico, W5100S-EVB-Pico2 or W5500-EVB-Pico2 with Tera Term.
 
@@ -111,7 +114,7 @@ static wiz_NetInfo g_net_info =
 
 4. Reset your board.
 
-5. If the iPerf example works normally on Raspberry Pi Pico, W5100S-EVB-Pico, W5500-EVB-Pico, W55RP20-EVB-Pico, W5100S-EVB-Pico2 or W5500-EVB-Pico2, you can see the network information of Raspberry Pi Pico, W5100S-EVB-Pico, W5500-EVB-Pico, W55RP20-EVB-Pico, W5100S-EVB-Pico2 or W5500-EVB-Pico2 and the TCP server is open.
+5. If the iPerf3 example works normally on Raspberry Pi Pico, W5100S-EVB-Pico, W5500-EVB-Pico, W55RP20-EVB-Pico, W5100S-EVB-Pico2 or W5500-EVB-Pico2, you can see the network information of Raspberry Pi Pico, W5100S-EVB-Pico, W5500-EVB-Pico, W55RP20-EVB-Pico, W5100S-EVB-Pico2 or W5500-EVB-Pico2 and the TCP server is open.
 
 ![][link-network_information]
 
@@ -120,23 +123,23 @@ static wiz_NetInfo g_net_info =
 ```cpp
 /* Change directory */
 // change to the 'iperf-x.x.x-winxx' directory.
-cd [user path]/iperf-x.x.x-winxx
+cd [user path]/iperf3.xx_xx
 
 // e.g.
-cd D:/iperf-2.0.9-win64
+cd D:/iperf3.16_64
 ```
-![][link-move_to_iperf_path]
+![][link-move_to_iperf3_path]
 
 7. In the command prompt, enter the following command to connect to Raspberry Pi Pico, W5100S-EVB-Pico or W5500-EVB-Pico running as a TCP server and test.
 
 ```cpp
 /* Network performance measurement test */
-.\iperf -c [connecting to] -t [time in seconds to transmit for] -i [seconds between periodic bandwidth reports]
+.\iperf3 -c [connecting to] -t [time in seconds to transmit for] -i [seconds between periodic bandwidth reports]
 
 // e.g.
-.\iperf -c 192.168.11.2 -t 20 -t 2
+.\iperf -c 192.168.11.2 -t 10 -t 1
 ```
-![][link-iperf_result]
+![][link-iperf3_lwip_result]
 
 
 
@@ -149,5 +152,5 @@ Link
 [link-raspberry_pi_pico_usb_mass_storage]: https://github.com/WIZnet-ioNIC/WIZnet-PICO-C/blob/main/static/images/loopback/raspberry_pi_pico_usb_mass_storage.png
 [link-connect_to_serial_com_port]: https://github.com/WIZnet-ioNIC/WIZnet-PICO-C/blob/main/static/images/loopback/connect_to_serial_com_port.png
 [link-network_information]: https://github.com/WIZnet-ioNIC/WIZnet-PICO-IPERF-C/blob/main/static/images/iperf/network_information.png
-[link-move_to_iperf_path]: https://github.com/WIZnet-ioNIC/WIZnet-PICO-IPERF-C/blob/main/static/images/iperf/move_to_iperf_path.png
-[link-iperf_result]: https://github.com/WIZnet-ioNIC/WIZnet-PICO-IPERF-C/blob/main/static/images/iperf/iperf_result.png
+[link-move_to_iperf3_path]: https://github.com/WIZnet-ioNIC/WIZnet-PICO-IPERF-C/blob/main/static/images/iperf/move_to_iperf3_path.png
+[link-iperf3_lwip_result]: https://github.com/WIZnet-ioNIC/WIZnet-PICO-IPERF-C/blob/main/static/images/iperf/iperf3_lwip_result.png

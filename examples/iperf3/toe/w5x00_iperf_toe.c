@@ -64,7 +64,7 @@
 /* Network */
 static wiz_NetInfo g_net_info =
     {
-        .mac = {0x00, 0x08, 0xDC, 0x12, 0x34, 0x57}, // MAC address
+        .mac = {0x00, 0x08, 0xDC, 0x12, 0x34, 0x56}, // MAC address
         .ip = {192, 168, 11, 101},                     // IP address
         .sn = {255, 255, 255, 0},                    // Subnet Mask
         .gw = {192, 168, 11, 1},                     // Gateway
@@ -88,10 +88,10 @@ uint16_t destport;
  */
 /* Clock */
 static void set_clock_khz(void);
-void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp);
-void handle_create_streams(uint8_t socket_ctrl, bool udp, uint8_t *dest_ip, uint16_t destport);
-void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bool reverse, bool udp, uint8_t *dest_ip, uint16_t destport);
-void exchange_results(uint8_t socket_ctrl, Stats *stats);
+void handle_param_exchange(bool *reverse, bool *udp);
+void handle_create_streams(bool udp, uint8_t *dest_ip, uint16_t destport);
+void start_iperf_test(Stats *stats, bool reverse, bool udp, uint8_t *dest_ip, uint16_t destport);
+void exchange_results(Stats *stats);
 
 /**
  * ----------------------------------------------------------------------------------------------------
@@ -101,7 +101,6 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats);
 int main()
 {
     /* Initialize */
-    
     uint8_t socket_status;
     Stats stats;
     
@@ -135,20 +134,20 @@ int main()
 
         if (socket_status == SOCK_ESTABLISHED)
         {
-            handle_param_exchange(SOCKET_CTRL, &reverse, &udp);
-            handle_create_streams(SOCKET_CTRL, udp, dest_ip, destport);
+            handle_param_exchange(&reverse, &udp);
+            handle_create_streams(udp, dest_ip, destport);
 
             if (reverse)
             {
                 memset(g_iperf_buf, 0xAA, ETHERNET_BUF_MAX_SIZE / 2);
             }
             
-            start_iperf_test(SOCKET_CTRL, SOCKET_DATA, &stats, reverse, udp, dest_ip, PORT_IPERF);
+            start_iperf_test(&stats, reverse, udp, dest_ip, PORT_IPERF);
         } 
         else if (socket_status == SOCK_CLOSE_WAIT)
         {
             disconnect(SOCKET_CTRL);
-            listen(SOCKET_CTRL);
+            disconnect(SOCKET_DATA);
         } 
         else if (socket_status == SOCK_CLOSED)
         {
@@ -179,7 +178,7 @@ static void set_clock_khz(void)
     );
 }
 
-void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp) 
+void handle_param_exchange(bool *reverse, bool *udp) 
 {
     char buffer[512] = {0};
     uint8_t cmd;
@@ -190,7 +189,7 @@ void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp)
     cJSON *reverseItem;
     cJSON *udpItem;
 
-    cookie_len = recv(socket_ctrl, cookie, COOKIE_SIZE);
+    cookie_len = recv(SOCKET_CTRL, cookie, COOKIE_SIZE);
     if (cookie_len != COOKIE_SIZE)
     {
         printf("[iperf] Failed to receive cookie. Received: %d bytes\n", cookie_len);
@@ -202,15 +201,15 @@ void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp)
 #endif
 
     cmd = PARAM_EXCHANGE;
-    send(socket_ctrl, &cmd, 1);
-    recv(socket_ctrl, raw_len, 4);
+    send(SOCKET_CTRL, &cmd, 1);
+    recv(SOCKET_CTRL, raw_len, 4);
 
     len = (raw_len[0] << 24) | (raw_len[1] << 16) | (raw_len[2] << 8) | raw_len[3];
 #ifdef IPERF_DEBUG
     printf("[iperf] Raw length bytes: 0x%02X 0x%02X 0x%02X 0x%02X, Parsed length: %d\n", raw_len[0], raw_len[1], raw_len[2], raw_len[3], len);
 #endif
 
-    recv(socket_ctrl, (uint8_t *)buffer, len);
+    recv(SOCKET_CTRL, (uint8_t *)buffer, len);
     buffer[len] = '\0'; // Null-terminate
 
 #ifdef IPERF_DEBUG
@@ -238,14 +237,12 @@ void handle_param_exchange(uint8_t socket_ctrl, bool *reverse, bool *udp)
     }
 }
 
-void handle_create_streams(uint8_t socket_ctrl, bool udp, uint8_t *dest_ip, uint16_t destport)
+void handle_create_streams(bool udp, uint8_t *dest_ip, uint16_t destport)
 {
     uint8_t cmd = CREATE_STREAMS;
     uint8_t received = 0;
-    uint8_t ret;
-    uint16_t size, sentsize;
 
-    send(socket_ctrl, &cmd, 1);
+    send(SOCKET_CTRL, &cmd, 1);
 
     if(udp)
     {
@@ -285,22 +282,20 @@ void handle_create_streams(uint8_t socket_ctrl, bool udp, uint8_t *dest_ip, uint
 #endif
 }
 
-void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bool reverse, bool udp, uint8_t *dest_ip, uint16_t destport)
+void start_iperf_test(Stats *stats, bool reverse, bool udp, uint8_t *dest_ip, uint16_t destport)
 {
-    bool running = true;
     uint8_t cmd = 0;
     uint32_t pack_len = 0;
     uint16_t sent_bytes = 0;
     uint16_t recv_bytes = 0;
-    uint16_t size = 0;
 
     // Start test
     cmd = TEST_START;
-    send(socket_ctrl, &cmd, 1);
+    send(SOCKET_CTRL, &cmd, 1);
 
     // Running test
     cmd = TEST_RUNNING;
-    send(socket_ctrl, &cmd, 1);
+    send(SOCKET_CTRL, &cmd, 1);
 
     iperf_stats_start(stats);
 
@@ -320,27 +315,27 @@ void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bo
         {
             if(udp)
             {
-                sent_bytes = sendto(socket_data, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2, dest_ip, destport);
+                sent_bytes = sendto(SOCKET_DATA, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2, dest_ip, destport);
             }
             else
             {
-                sent_bytes = send(socket_data, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2);
+                sent_bytes = send(SOCKET_DATA, g_iperf_buf, ETHERNET_BUF_MAX_SIZE / 2);
             }
             
             iperf_stats_add_bytes(stats, sent_bytes);
         }
         else
         {
-            getsockopt(socket_data, SO_RECVBUF, &pack_len);
+            getsockopt(SOCKET_DATA, SO_RECVBUF, &pack_len);
             if(pack_len > 0)
             {
                 if(udp)
                 {
-                    recv_bytes = recvfrom(socket_data, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE - 1, dest_ip, (uint16_t*)&destport);
+                    recv_bytes = recvfrom(SOCKET_DATA, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE - 1, dest_ip, (uint16_t*)&destport);
                 }
                 else
                 {
-                    recv_bytes = recv_iperf(socket_data, (uint8_t *)g_iperf_buf, ETHERNET_BUF_MAX_SIZE - 1);
+                    recv_bytes = recv_iperf(SOCKET_DATA, (uint8_t *)g_iperf_buf, pack_len);
                 }
 
                 iperf_stats_add_bytes(stats, recv_bytes);
@@ -359,10 +354,10 @@ void start_iperf_test(uint8_t socket_ctrl, uint8_t socket_data, Stats *stats, bo
     }
     iperf_stats_stop(stats);
 
-    exchange_results(SOCKET_CTRL, stats);
+    exchange_results(stats);
 }
 
-void exchange_results(uint8_t socket_ctrl, Stats *stats) 
+void exchange_results(Stats *stats) 
 {
     uint8_t cmd = EXCHANGE_RESULTS;
     uint32_t result_len = 0;
@@ -375,10 +370,10 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
     cJSON *stream;
 
     // Ask to exchange results
-    send(socket_ctrl, &cmd, 1);
+    send(SOCKET_CTRL, &cmd, 1);
 
     // Receive client results
-    recv(socket_ctrl, (uint8_t *)&result_len, 4);
+    recv(SOCKET_CTRL, (uint8_t *)&result_len, 4);
     result_len = (result_len << 24) | ((result_len << 8) & 0x00FF0000) | ((result_len >> 8) & 0x0000FF00) | (result_len >> 24); // Convert to host-endian
 
     if (result_len > sizeof(buffer))
@@ -387,7 +382,7 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
         return;
     }
 
-    recv(socket_ctrl, (uint8_t *)buffer, result_len);
+    recv(SOCKET_CTRL, (uint8_t *)buffer, result_len);
     buffer[result_len] = '\0'; // Null-terminate the received JSON data
 #ifdef IPERF_DEBUG
     printf("[iperf] Client results received: %s\n", buffer);
@@ -395,11 +390,10 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
 
     // Prepare server results
     results = cJSON_CreateObject();
-    cJSON_AddNumberToObject(results, "cpu_util_total", 1);
-    cJSON_AddNumberToObject(results, "cpu_util_user", 0.5);
-    cJSON_AddNumberToObject(results, "cpu_util_system", 0.5);
-    cJSON_AddNumberToObject(results, "sender_has_retransmits", 1);
-    cJSON_AddStringToObject(results, "congestion_used", "cubic");
+    cJSON_AddNumberToObject(results, "cpu_util_total", 0);
+    cJSON_AddNumberToObject(results, "cpu_util_user", 0);
+    cJSON_AddNumberToObject(results, "cpu_util_system", 0);
+    cJSON_AddNumberToObject(results, "sender_has_retransmits", 0);
 
     // Streams object
     streams = cJSON_CreateArray();
@@ -425,17 +419,17 @@ void exchange_results(uint8_t socket_ctrl, Stats *stats)
     length_bytes[2] = (results_len >> 8) & 0xFF;
     length_bytes[3] = results_len & 0xFF;
 
-    send(socket_ctrl, length_bytes, 4);
-    send(socket_ctrl, (uint8_t *)results_str, results_len);
+    send(SOCKET_CTRL, length_bytes, 4);
+    send(SOCKET_CTRL, (uint8_t *)results_str, results_len);
 
     cJSON_Delete(results);
 
     // Ask to display results
     cmd = DISPLAY_RESULTS;
-    send(socket_ctrl, &cmd, 1);
+    send(SOCKET_CTRL, &cmd, 1);
 
     // Wait for IPERF_DONE command
-    recv(socket_ctrl, &cmd, 1);
+    recv(SOCKET_CTRL, &cmd, 1);
     if (cmd == IPERF_DONE)
     {
         printf("[iperf] Test completed successfully.\n");
